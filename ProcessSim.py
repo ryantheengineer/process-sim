@@ -88,11 +88,12 @@ class Queue():
             # return False
         else:
             if self.queueval > 0:
-                self.q_times.append(P_time)
+                self.q_times.append(P_time) # FIX: Somewhere in here, there are some missing times (in the end the time vector is a fair bit shorter than the queue quantity vector)
                 self.queueval -= 1
                 # return False
             else:
                 P_time = S_time
+                self.q_times.append(P_time)
                 # return P_time
                 
                 
