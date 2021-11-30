@@ -8,7 +8,6 @@ Created on Mon Nov 29 12:59:17 2021
 from pubsub import pub
 import numpy as np
 import matplotlib.pyplot as plt
-# import datetime as dt
 import time
 
 # def listener1(quantity):
@@ -29,24 +28,26 @@ class Source():
         return next(self.generator_iterator)
 
     def source_generator(self):
-        while self.t <= self.tmax:
+        while True:
             yield self.t
             interval = np.random.exponential(self.gscale)
             self.t += interval
 
-    def initiate_source(self):
+    def activate_source(self):
         while self.t <= self.tmax:
             next(self)
             pub.sendMessage("source_changing", time=self.t, quantity=1)
 
-
+    def reset_source(self):
+        self.t = 0.0
+        self.generator_iterator = self.source_generator()
 
 
 class Queue():
     """Subscribes to SourceTime messages and increments queue value at those times."""
 
     def __init__(self,source_topic,queue_topic,processor_receive_topic):
-        self.queueval = 0
+        self.q_val = 0
         self.q_quan = []
         self.q_times = []
         self.queue_topic = queue_topic
@@ -54,22 +55,20 @@ class Queue():
         pub.subscribe(self.update_queue,source_topic)
         pub.subscribe(self.update_queue,processor_receive_topic)
 
-    def update_queue(self,quantity):
-        if quantity >= 0:
-            print("Add to queue")
-            self.queueval += quantity
-            if self.queueval > 0:
-                pub.sendMessage(self.queue_topic, queue_good=True)
-            self.q_quan.append(self.queueval)
-            self.q_times.append(time.time())
+    def update_queue(self,time,quantity):
+        self.q_times.append(time)
+        if (self.q_val + quantity) >= 0:
+            self.q_val += quantity
+            print("1 item received at {}. Total: {}".format(time,self.q_val))
         else:
-            print("Remove from queue")
-            self.queueval += quantity
-            if self.queueval <= 0:
-                pub.sendMessage(self.queue_topic, queue_good=False)
-                print("Queue is zero or less")
-            self.q_quan.append(self.queueval)
-            self.q_times.append(time.time())
+            self.q_val = 0
+
+        self.q_quan.append(self.q_val)
+        if self.q_val > 0:
+            pub.sendMessage(self.queue_topic, qtime=self.q_times[-1], q_pos=True)
+        else:
+            pub.sendMessage(self.queue_topic, qtime=self.q_times[-1], q_pos=False)
+
 
 class Processor():
     """Subscribes to Queue messages to check if the queue quantity is a positive
@@ -77,56 +76,61 @@ class Processor():
     quantity in the queue upstream."""
 
     def __init__(self,pscale,Queue_object,processor_out_topic):
-        self.processing = False
         self.pscale = pscale
         self.Queue_object = Queue_object
-        self.tinterval = 0.0
-        self.generator_iterator = self.processor_generator()
+        self.processor_out_topic = processor_out_topic
+
+        self.processing = False
         self.output_times = []
+        self.t = 0.0
+        next(self)
+        self.p_receive = 0.0
+        next(self)
+        self.p_output = self.t
+        self.generator_iterator = self.processor_generator()
+
         pub.subscribe(self.process,self.Queue_object.queue_topic)
         self.processor_receive_topic = self.Queue_object.processor_receive_topic
-        self.processor_out_topic = processor_out_topic
 
     def __next__(self):
         return next(self.generator_iterator)
 
+    def send(self, value):
+        self.t = value
+
     def processor_generator(self):
         while True:
-            self.tinterval = np.random.exponential(self.pscale)
-            yield self.tinterval
+            interval = np.random.exponential(self.pscale)
+            self.t += interval
+            yield self.t
 
-    def process(self,queue_good):
-        # Check if the queue is good. If queue_good=True, and self.processing=False,
-        # send a message to the queue to decrement by 1 and generate a process
-        # time. Until the processing time is complete, set self.processing=True,
-        # which should prevent the processor from accepting work from the queue
-        if queue_good is True:
-            if self.processing is False:
-                self.processing = True
-                pub.sendMessage(self.processor_receive_topic, quantity=-1)
-                print("Processor received from queue")
-                next(self)
-                start = time.time()
-                tdone = start + self.tinterval
-                # while time.time() < tdone: # This is especially blocking code
-                #     pass
-                #
-                # self.output_times.append(time.time())
-                # pub.sendMessage(self.processor_out_topic, quantity=1)
-                # self.processing = False
-                # print("Processor finished")
-            if self.processing is True:
-                if time.time() >= tdone:
-                    self.output_times.append(tdone)
-                pub.sendMessage(self.processor_out_topic, quantity=1)
-                self.processing = False
-                print("Processor finished")
+    def process(self,q,q_pos):
+        if q_pos is True:
+            if self.processing = False:
+                if self.p_receive >= qtime:
+                    self.processing = True
+                    pub.sendMessage(self.processor_receive_topic, time=self.p_receive, quantity=-1)
+                    pub.sendMessage(self.processor_out_topic, time=self.p_output, quantity=1)
+                    self.p_receive = self.p_output
+                    next(self)
+                    self.p_output = self.t
+
+                    self.processing = False
+
+                if self.p_receive < qtime:
+                    self.processing = True
+                    pub.sendMessage(self.processor_receive_topic, time=self.p_receive, quantity=-1)
+                    pub.sendMessage(self.processor_out_topic, time=self.p_output, quantity=1)
+
+
+
+
 
 
 if __name__ == '__main__':
     source = Source(0.5,20)
     queue1 = Queue("source_changing","queue_state","processor_receiving")
-    processor1 = Processor(2.0,queue1,"processor_finished")
+    # processor1 = Processor(2.0,queue1,"processor_finished")
 
     source.initiate_source()
 
