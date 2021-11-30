@@ -8,16 +8,11 @@ Created on Mon Nov 29 12:59:17 2021
 from pubsub import pub
 import numpy as np
 import matplotlib.pyplot as plt
-import datetime as dt
+# import datetime as dt
 import time
 
-# def listener1(arg1):
-#     print('Listener received time: ', arg1)
-#
-# pub.subscribe(listener1, 'SourceTime')
-
-def listener1(quantity):
-    print("Quantity increased by 1 at: ",dt.datetime.now())
+# def listener1(quantity):
+#     print("Quantity increased by 1 at: ",dt.datetime.now())
 
 
 class Source():
@@ -35,26 +30,10 @@ class Source():
 
     def source_generator(self):
         while True:
-            # g_int = np.random.exponential(self.gscale)
-            # sec = int(g_int)
-            # millisec = int((g_int - int(g_int))*1000.0)
-            # microsec = int(((g_int - int(g_int))*1000.0 - int((g_int - int(g_int))*1000.0))*1000.0)
-            # self.tinterval = dt.timedelta(seconds = sec, milliseconds = millisec, microseconds=microsec)
-            # yield self.tinterval
             self.tinterval = np.random.exponential(self.gscale)
             yield self.tinterval
 
     def initiate_source(self):
-        # start = dt.datetime.now()
-        # tfinal = start + dt.timedelta(seconds = self.tmax)
-        # next(self)
-        # tnext = start + self.tinterval
-        # while dt.datetime.now() < tfinal:
-        #     if dt.datetime.now() > tnext:
-        #         pub.sendMessage("source_changing", quantity=1)
-        #         next(self)
-        #         tnext = dt.datetime.now() + self.tinterval
-        #         print('Message sent at: ', dt.datetime.now())
         start = time.time()
         tfinal = start + self.tmax
         next(self)
@@ -77,6 +56,7 @@ class Queue():
         self.q_quan = []
         self.q_times = []
         self.queue_topic = queue_topic
+        self.processor_receive_topic = processor_receive_topic
         pub.subscribe(self.update_queue,source_topic)
         pub.subscribe(self.update_queue,processor_receive_topic)
 
@@ -90,7 +70,7 @@ class Queue():
             self.q_times.append(time.time())
         else:
             print("Remove from queue")
-            self.queueval -= quantity
+            self.queueval += quantity
             if self.queueval <= 0:
                 pub.sendMessage(self.queue_topic, queue_good=False)
                 print("Queue is zero or less")
@@ -102,14 +82,15 @@ class Processor():
     integer. Sends messages to processor_changing topic that decrement the
     quantity in the queue upstream."""
 
-    def __init__(self,pscale,queue_topic,processor_receive_topic,processor_out_topic):
+    def __init__(self,pscale,Queue_object,processor_out_topic):
         self.processing = False
         self.pscale = pscale
+        self.Queue_object = Queue_object
         self.tinterval = 0.0
         self.generator_iterator = self.processor_generator()
         self.output_times = []
-        pub.subscribe(self.process,queue_topic)
-        self.processor_receive_topic = processor_receive_topic
+        pub.subscribe(self.process,self.Queue_object.queue_topic)
+        self.processor_receive_topic = self.Queue_object.processor_receive_topic
         self.processor_out_topic = processor_out_topic
 
     def __next__(self):
@@ -117,12 +98,6 @@ class Processor():
 
     def processor_generator(self):
         while True:
-            # p_int = np.random.exponential(self.pscale)
-            # sec = int(p_int)
-            # millisec = int((p_int - int(p_int))*1000.0)
-            # microsec = int(((p_int - int(p_int))*1000.0 - int((p_int - int(p_int))*1000.0))*1000.0)
-            # self.tinterval = dt.timedelta(seconds = sec, milliseconds = millisec, microseconds=microsec)
-            # yield self.tinterval
             self.tinterval = np.random.exponential(self.pscale)
             yield self.tinterval
 
@@ -137,21 +112,18 @@ class Processor():
                 pub.sendMessage(self.processor_receive_topic, quantity=-1)
                 print("Processor received from queue")
                 next(self)
-                # start = dt.datetime.now()
-                # tdone = start + self.tinterval
-                # while dt.datetime.now() < tdone:
+                start = time.time()
+                tdone = start + self.tinterval
+                # while time.time() < tdone: # This is especially blocking code
                 #     pass
                 #
-                # self.output_times.append(dt.datetime.now())
+                # self.output_times.append(time.time())
                 # pub.sendMessage(self.processor_out_topic, quantity=1)
                 # self.processing = False
                 # print("Processor finished")
-                start = time.time()
-                tdone = start + self.tinterval
-                while time.time() < tdone:
-                    pass
-
-                self.output_times.append(time.time())
+            if self.processing is True:
+                if time.time() >= tdone:
+                    self.output_times.append(tdone)
                 pub.sendMessage(self.processor_out_topic, quantity=1)
                 self.processing = False
                 print("Processor finished")
@@ -160,7 +132,7 @@ class Processor():
 if __name__ == '__main__':
     source = Source(0.5,20)
     queue1 = Queue("source_changing","queue_state","processor_receiving")
-    # processor1 = Processor(1.0,"queue_state","processor_receiving","processor_finished")
+    processor1 = Processor(2.0,queue1,"processor_finished")
 
     source.initiate_source()
 
@@ -174,15 +146,3 @@ if __name__ == '__main__':
     plt.xlabel('Time')
     plt.ylabel('Quantity')
     plt.show()
-
-# queue = Queue('source_changing')
-#
-# plt.plot(queue.q_times,queue.queue)
-# plt.show()
-
-
-
-# while True:
-#     # time = str(dt.datetime.now())
-#     # pub.sendMessage('rootTopic', arg1=time)
-#
