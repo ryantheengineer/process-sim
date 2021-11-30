@@ -21,29 +21,23 @@ class Source():
 
     def __init__(self,gscale,tmax):
         self.gscale = gscale
-        self.tmax = float(tmax)        # integer seconds
-        self.tinterval = 0.0
+        self.tmax = tmax
+        self.t = 0.0
         self.generator_iterator = self.source_generator()
 
     def __next__(self):
         return next(self.generator_iterator)
 
     def source_generator(self):
-        while True:
-            self.tinterval = np.random.exponential(self.gscale)
-            yield self.tinterval
+        while self.t <= self.tmax:
+            yield self.t
+            interval = np.random.exponential(self.gscale)
+            self.t += interval
 
     def initiate_source(self):
-        start = time.time()
-        tfinal = start + self.tmax
-        next(self)
-        tnext = start + self.tinterval
-        while time.time() < tfinal:
-            if time.time() > tnext:
-                pub.sendMessage("source_changing", quantity=1)
-                next(self)
-                tnext = time.time() + self.tinterval
-                print("Message sent at: ", time.time()-start)
+        while self.t <= self.tmax:
+            next(self)
+            pub.sendMessage("source_changing", time=self.t, quantity=1)
 
 
 
