@@ -114,7 +114,8 @@ class Processor():
                 self.processing = True
 
             # If the processor's current start and end times are greater than
-            # the time when a new item is received in the queue, but
+            # the time when a new item is received in the queue, 
+
 
 
             # Only process an item from the queue if the processor is not
