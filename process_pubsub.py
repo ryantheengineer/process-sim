@@ -9,6 +9,7 @@ from pubsub import pub
 import numpy as np
 import matplotlib.pyplot as plt
 import datetime as dt
+import time
 
 def listener1(arg1):
     print('Listener received time: ', arg1)
@@ -63,13 +64,13 @@ def listener1(quantity):
 class Queue():
     """Subscribes to SourceTime messages and increments queue value at those times."""
 
-    def __init__(self,source_topic,queue_topic,processor_topic):
+    def __init__(self,source_topic,queue_topic,processor_receive_topic):
         self.queueval = 0
         self.q_quan = []
         self.q_times = []
         self.queue_topic = queue_topic
         pub.subscribe(self.update_queue,source_topic)
-        pub.subscribe(self.update_queue,processor_topic)
+        pub.subscribe(self.update_queue,processor_receive_topic)
 
     def update_queue(self,quantity):
         if quantity >= 0:
@@ -112,7 +113,7 @@ class Processor():
             self.tinterval = dt.timedelta(seconds = sec, milliseconds = millisec, microseconds=microsec)
             yield self.tinterval
 
-    def process(self,queue_topic):
+    def process(self,queue_good):
         # Check if the queue is good. If queue_good=True, and self.processing=False,
         # send a message to the queue to decrement by 1 and generate a process
         # time. Until the processing time is complete, set self.processing=True,
@@ -121,6 +122,7 @@ class Processor():
             if self.processing is False:
                 self.processing = True
                 pub.sendMessage(self.processor_receive_topic, quantity=-1)
+                print("Processor received from queue")
                 next(self)
                 start = dt.datetime.now()
                 tdone = start + self.tinterval
@@ -130,10 +132,22 @@ class Processor():
                 self.output_times.append(dt.datetime.now())
                 pub.sendMessage(self.processor_out_topic, quantity=1)
                 self.processing = False
+                print("Processor finished")
 
 
+if __name__ == '__main__':
+    source = Source(2.0,100)
+    queue1 = Queue("source_changing","queue_state","processor_receiving")
+    processor1 = Processor(0.5,"queue_state","processor_receiving","processor_finished")
 
-# source = Source(1.2,1000)
+    source.initiate_source()
+
+    plt.plot(queue1.q_times,queue1.q_quan)
+    plt.title('Queue 1 Quantity over Time')
+    plt.xlabel('Time')
+    plt.ylabel('Quantity')
+    plt.show()
+
 # queue = Queue('source_changing')
 #
 # plt.plot(queue.q_times,queue.queue)
