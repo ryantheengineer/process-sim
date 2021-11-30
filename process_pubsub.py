@@ -65,14 +65,14 @@ class Queue():
             print("Add to queue")
             self.queueval += quantity
             if self.queueval > 0:
-                pub.sendMessage(self.queue_topic, queue_good=True)
+                pub.sendMessage(self.queue_topic, q_pos=True)
             self.q_quan.append(self.queueval)
             self.q_times.append(time.time())
         else:
             print("Remove from queue")
             self.queueval += quantity
             if self.queueval <= 0:
-                pub.sendMessage(self.queue_topic, queue_good=False)
+                pub.sendMessage(self.queue_topic, q_pos=False)
                 print("Queue is zero or less")
             self.q_quan.append(self.queueval)
             self.q_times.append(time.time())
@@ -101,12 +101,12 @@ class Processor():
             self.tinterval = np.random.exponential(self.pscale)
             yield self.tinterval
 
-    def process(self,queue_good):
-        # Check if the queue is good. If queue_good=True, and self.processing=False,
+    def process(self,q_pos):
+        # Check if the queue is good. If q_pos=True, and self.processing=False,
         # send a message to the queue to decrement by 1 and generate a process
         # time. Until the processing time is complete, set self.processing=True,
         # which should prevent the processor from accepting work from the queue
-        if queue_good is True:
+        if q_pos is True:
             if self.processing is False:
                 self.processing = True
                 pub.sendMessage(self.processor_receive_topic, quantity=-1)
