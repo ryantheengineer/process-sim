@@ -104,8 +104,22 @@ class Processor():
             self.t += interval
             yield self.t
 
-    def process(self,q,q_pos):
+    def process(self,qtime,q_pos):
         if q_pos is True:
+            # If the processor's current start and end times bracket the time
+            # when a new item is received in the queue, then the processor
+            # is unavailable to work on the new item. Skip modifying the queue
+            # and don't calculate new processor times.
+            if self.p_receive < qtime and self.p_output > qtime:
+                self.processing = True
+
+            # If the processor's current start and end times are greater than
+            # the time when a new item is received in the queue, but
+
+
+            # Only process an item from the queue if the processor is not
+            # already processing something. This should allow multiple
+            # processors to work together on the same queue.
             if self.processing = False:
                 if self.p_receive >= qtime:
                     self.processing = True
