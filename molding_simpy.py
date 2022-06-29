@@ -8,7 +8,7 @@ Created on Mon Jun 27 15:12:06 2022
 import simpy
 import random
 # import statistics
-# import numpy as np
+import numpy as np
 
 orders = []
 cycle_times = []
@@ -55,7 +55,12 @@ class Plant(object):
         
         self.kitting = Kitting(env, self.op_float)
         
-        self.mold = Mold(env, self.op_mold)
+        self.mold_brown = Mold(env, self.op_mold, "BROWN")
+        self.mold_pink = Mold(env, self.op_mold, "PINK")
+        self.mold_purple = Mold(env, self.op_mold, "PURPLE")
+        self.mold_orange = Mold(env, self.op_mold, "ORANGE")
+        self.mold_red = Mold(env, self.op_mold, "RED")
+        self.mold_green = Mold(env, self.op_mold, "GREEN")
         
         # self.mold_area = MoldArea(env, self.op_mold, self.mold_colors)
         
@@ -68,30 +73,31 @@ class Kitting(object):
         self.op_float = floats
         
     def make_kit(self, part, op_float):
-        done_in = random.normalvariate(5.0, 1.0)
+        done_in = np.around(random.normalvariate(5.0, 1.0),1)
         yield self.env.timeout(done_in)
         # print("Kitting completed in {} at {}".format(done_in, env.now))
                 
                 
 class Mold(object):
-    def __init__(self, env, mold_operators):
+    def __init__(self, env, mold_operators, color):
         self.env = env
         self.op_mold = mold_operators
+        self.color = color
         
     def layup(self, part, op_mold):
-        done_in = random.normalvariate(15.0, 3.0)
+        done_in = np.around(random.normalvariate(15.0, 3.0),1)
         yield self.env.timeout(done_in)
-        # print("Layup completed in {} at {}".format(done_in, env.now))
+        print("{}:\tLayup completed in {} at {}".format(self.color, done_in, np.around(env.now,1)))
         
     def close_mold(self, part, op_mold):
-        done_in = random.normalvariate(10.0, 2.0)
+        done_in = np.around(random.normalvariate(10.0, 2.0),1)
         yield self.env.timeout(done_in)
-        # print("Close and pull vacuum completed in {} at {}".format(done_in, env.now))
+        print("{}:\tClose and pull vacuum completed in {} at {}".format(self.color, done_in, np.around(env.now,1)))
         
     def shoot_part(self, part, op_mold):
-        done_in = random.normalvariate(30.0, 5.0)
+        done_in = np.around(random.normalvariate(30.0, 5.0),1)
         yield self.env.timeout(done_in)
-        # print("Shoot part completed in {} at {}".format(done_in, env.now))
+        print("{}:\tShoot part completed in {} at {}".format(self.color, done_in, np.around(env.now,1)))
         
         
 # class MoldArea(object):
@@ -104,7 +110,26 @@ class Mold(object):
         
         
 def process_part(env, part, plant):
+    if plant.op_mold.capacity > 6:
+        moldnum = part % plant.molds.capacity
+    else:
+        moldnum = part % plant.op_mold.capacity
+    # print(moldnum)
     
+    if moldnum == 0:
+        mold = plant.mold_brown
+    elif moldnum == 1:
+        mold = plant.mold_pink
+    elif moldnum == 2:
+        mold = plant.mold_purple
+    elif moldnum == 3:
+        mold = plant.mold_orange
+    elif moldnum == 4:
+        mold = plant.mold_red
+    elif moldnum == 5:
+        mold = plant.mold_green
+    else:
+        raise ValueError("Mold number out of scope")
     
     # Build the kit for the part
     with plant.op_float.request(priority=1) as request:
@@ -117,19 +142,19 @@ def process_part(env, part, plant):
     with plant.op_mold.request(priority=1) as op_mold_request:
         with plant.molds.request() as mold_request:
             yield env.all_of([op_mold_request, mold_request])
-            yield env.process(plant.mold.layup(part, plant.op_mold))
+            yield env.process(mold.layup(part, plant.op_mold))
     
     # Close mold and pull vacuum
     with plant.op_mold.request(priority=1) as op_mold_request:
         with plant.molds.request() as mold_request:
             yield env.all_of([op_mold_request, mold_request])
-            yield env.process(plant.mold.close_mold(part, plant.op_mold))
+            yield env.process(mold.close_mold(part, plant.op_mold))
             
     # Shoot the part
     with plant.op_mold.request(priority=1) as op_mold_request:
         with plant.molds.request() as mold_request:
             yield env.all_of([op_mold_request, mold_request])
-            yield env.process(plant.mold.shoot_part(part, plant.op_mold))
+            yield env.process(mold.shoot_part(part, plant.op_mold))
     
     duration = env.now - start
     # print(start)
@@ -144,7 +169,7 @@ def run_plant(env, num_operators, num_floats, num_molds):
     part = 0
     
     while True:
-        yield env.timeout(50.0)
+        yield env.timeout(10.0)
         
         part += 1
         orders.append(part)
@@ -159,7 +184,7 @@ if __name__ == '__main__':
     env = simpy.Environment()
     # env.process(order_arrival(env))
     # plant = Plant(env, 2, 2)
-    num_operators = 2
+    num_operators = 3
     num_floats = 2
     num_molds = 6
     env.process(run_plant(env, num_operators, num_floats, num_molds))
