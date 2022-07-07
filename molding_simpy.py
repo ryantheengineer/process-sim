@@ -11,37 +11,51 @@ import random
 import numpy as np
 
 orders = []
-cycle_times = []
+order_completion_times = []
+
+def positive_done_in(mu, sigma):
+    done_in = -1
+    while done_in < 0:
+        done_in = np.around(random.normalvariate(mu, sigma),1)
+    return done_in
 
 # A part is an individual product that must be produced
 class Part():
-    def __init__(self):
+    def __init__(self, order_num):
         color_options = ["Tan", "Gray"]
         size_options = [36, 48, 60, 72, 84, 96, 102]
+        dice_rolls = [4, 5, 6, 7, 8, 9, 10]
+        dsum = 0
+        while dsum < 4 or dsum > 10:
+            d1 = random.randint(1,6)
+            d2 = random.randint(1,6)
+            dsum = d1 + d2
+        size_idx = dice_rolls.index(dsum)
         self.color = random.choice(color_options)
-        self.size = random.choice(size_options)
+        self.size = size_options[size_idx]
+        self.order_num = order_num
         
-# An order is a list of parts
-class Order():
-    def __init__(self, size):
-        self.size = size
-        self.order_list = [Part() for i in range(self.size)]
+# # An order is a list of parts
+# class Order():
+#     def __init__(self, size):
+#         self.size = size
+#         self.order_list = [Part() for i in range(self.size)]
         
-    def enumerate_order(self):
-        # print("\nOrder received:")
-        for part in self.order_list:
-            print("{} {}".format(part.color, part.size))
+#     def enumerate_order(self):
+#         # print("\nOrder received:")
+#         for part in self.order_list:
+#             print("{} {}".format(part.color, part.size))
 
-# Generate random new orders at random intervals
-def order_arrival(env):
-    while True:
-        order_time = random.normalvariate(10.0, 2.0)
-        yield env.timeout(order_time)
-        size = random.randint(2,10)
-        order = Order(size)
-        print("\nOrder received at {}".format(env.now))
-        order.enumerate_order()
-        orders.append(order)
+# # # Generate random new orders at random intervals
+# # def order_arrival(env):
+# #     while True:
+# #         order_time = random.normalvariate(10.0, 2.0)
+# #         yield env.timeout(order_time)
+# #         size = random.randint(2,10)
+# #         order = Order(size)
+# #         print("\nOrder received at {}".format(env.now))
+# #         order.enumerate_order()
+# #         orders.append(order)
 
     
 class Plant(object):
@@ -54,6 +68,8 @@ class Plant(object):
         self.molds = simpy.Resource(env, num_molds)
         
         self.kitting = Kitting(env, self.op_float)
+        
+        self.finishing = Finishing(env, self.op_float)
         
         self.mold_brown = Mold(env, self.op_mold, "BROWN")
         self.mold_pink = Mold(env, self.op_mold, "PINK")
@@ -73,9 +89,10 @@ class Kitting(object):
         self.op_float = floats
         
     def make_kit(self, part, op_float):
-        done_in = np.around(random.normalvariate(5.0, 1.0),1)
+        done_in = positive_done_in(5.0, 1.0)
+        # done_in = np.around(random.normalvariate(5.0, 1.0),1)
         yield self.env.timeout(done_in)
-        # print("Kitting completed in {} at {}".format(done_in, env.now))
+        print("Kitting completed in {} at {}".format(done_in, np.around(env.now),1))
                 
                 
 class Mold(object):
@@ -85,35 +102,57 @@ class Mold(object):
         self.color = color
         
     def layup(self, part, op_mold):
-        done_in = np.around(random.normalvariate(15.0, 3.0),1)
+        done_in = positive_done_in(15.0, 3.0)
+        # done_in = np.around(random.normalvariate(15.0, 3.0),1)
         yield self.env.timeout(done_in)
         print("{}:\tLayup completed in {} at {}".format(self.color, done_in, np.around(env.now,1)))
         
     def close_mold(self, part, op_mold):
-        done_in = np.around(random.normalvariate(10.0, 2.0),1)
+        done_in = positive_done_in(10.0, 2.0)
+        # done_in = np.around(random.normalvariate(10.0, 2.0),1)
         yield self.env.timeout(done_in)
         print("{}:\tClose and pull vacuum completed in {} at {}".format(self.color, done_in, np.around(env.now,1)))
         
     def shoot_part(self, part, op_mold):
-        done_in = np.around(random.normalvariate(30.0, 5.0),1)
+        done_in = positive_done_in(15.0, 5.0)
+        # done_in = np.around(random.normalvariate(15.0, 5.0),1)
         yield self.env.timeout(done_in)
         print("{}:\tShoot part completed in {} at {}".format(self.color, done_in, np.around(env.now,1)))
         
+    # Dave's suggestion: Secondary process that doesn't require any
+    # resources that immediately follows a process that does require an
+    # operator resource. This would simulate tasks like shooting a part that 
+    # don't require the operator to be fully engaged in the process for the
+    # duration of the process
+    def part_curing(self, part):
+        # done_in = np.around(random.normalvariate())
+        done_in = positive_done_in(15.0, 5.0)
+        yield self.env.timeout(done_in)
+        print("{}:\tPart curing completed in {} at {}".format(self.color, done_in, np.around(env.now,1)))
         
-# class MoldArea(object):
-#     def __init__(self, env, mold_operators, mold_colors):
-#         self.env = env
-#         self.op_mold = mold_operators
-#         self.mold_colors = mold_colors
-#         self.molds = [Mold(env, self.op_mold, color) for color in self.mold_colors]
         
+class Finishing(object):
+    def __init__(self, env, floats):
+        self.env = env
+        self.op_float = floats
+    
+    def trim_part(self, part, op_float):
+        done_in = positive_done_in(5.0, 1.0)
+        yield self.env.timeout(done_in)
+        print("Part trimmed in {} at {}".format(done_in, np.around(env.now, 1)))
         
-        
+    def apply_tint(self, part, op_float):
+        done_in = positive_done_in(3.0, 0.5)
+        yield self.env.timeout(done_in)
+        print("Tint applied in {} at {}".format(done_in, np.around(env.now, 1)))
+
+
 def process_part(env, part, plant):
     if plant.op_mold.capacity > 6:
-        moldnum = part % plant.molds.capacity
+        moldnum = part.order_num % plant.molds.capacity
     else:
-        moldnum = part % plant.op_mold.capacity
+        limiting_capacity = np.min([plant.molds.capacity, plant.op_mold.capacity])
+        moldnum = part.order_num % limiting_capacity
     # print(moldnum)
     
     if moldnum == 0:
@@ -132,64 +171,114 @@ def process_part(env, part, plant):
         raise ValueError("Mold number out of scope")
     
     # Build the kit for the part
-    with plant.op_float.request(priority=1) as request:
+    with plant.op_float.request(priority=2) as request:
         yield request
         yield env.process(plant.kitting.make_kit(part, plant.op_float))
         
     start = env.now
     # Mold the part
-    # Layup
-    with plant.op_mold.request(priority=1) as op_mold_request:
-        with plant.molds.request() as mold_request:
+    # Request a mold
+    with plant.molds.request() as mold_request:
+        # Request an operator
+        with plant.op_mold.request(priority=2) as op_mold_request:
             yield env.all_of([op_mold_request, mold_request])
             yield env.process(mold.layup(part, plant.op_mold))
-    
-    # Close mold and pull vacuum
-    with plant.op_mold.request(priority=1) as op_mold_request:
-        with plant.molds.request() as mold_request:
-            yield env.all_of([op_mold_request, mold_request])
             yield env.process(mold.close_mold(part, plant.op_mold))
-            
-    # Shoot the part
-    with plant.op_mold.request(priority=1) as op_mold_request:
-        with plant.molds.request() as mold_request:
-            yield env.all_of([op_mold_request, mold_request])
             yield env.process(mold.shoot_part(part, plant.op_mold))
+            yield env.process(mold.part_curing(part))   # This doesn't always force curing to happen before a mold can be used for layup
+            
+    # Finish the part
+    with plant.op_float.request(priority=2) as request:
+        yield request
+        yield env.process(plant.finishing.trim_part(part, plant.op_float))
+        yield env.process(plant.finishing.apply_tint(part, plant.op_float))
     
     duration = env.now - start
-    # print(start)
-    # print(duration)
-    # print("")
-    cycle_times.append(duration)
+    order_completion_times.append(duration)
         
-        
-        
+    
+# def take_lunch(env, operator):
+#     done_in = np.around(random.normalvariate(15.0, 3.0),1)
+#     with operator.request(priority=1) as req:
+#         yield req
+#         try:
+#             yield env.timeout(done_in)
+#         except simpy.Interrupt:
+#             pass
+    
+    
 def run_plant(env, num_operators, num_floats, num_molds):
     plant = Plant(env, num_operators, num_floats, num_molds)
-    part = 0
+    partcount = 0
     
-    while True:
-        yield env.timeout(10.0)
-        
-        part += 1
-        orders.append(part)
-        # print("\nPart received at {}".format(env.now))
+    start_idx = partcount
+    
+    # Start the simulation with 10 orders in the queue
+    for i in range(10):
+        partcount += 1
+        orders.append(Part(partcount))
+    
+    print("\n{} parts ordered at {}".format(10, env.now))
+    
+    for part in orders[start_idx:-1]:
         env.process(process_part(env, part, plant))
-
-
+    
+    # Start generating orders of 10 parts at random intervals
+    while True:        
+        # Every n_hours, create a random number of orders to be processed
+        # n_parts = random.randint(10,15)
+        n_parts = 10    # 10 parts per pallet
+        n_hours = 2
+        n_minutes = n_hours*60.0
+        random_time = -1
+        
+        random_time = positive_done_in(n_minutes, 60.0)
+            
+        yield env.timeout(random_time)
+        
+        start_idx = partcount
+        
+        # add n_parts to part count
+        for i in range(n_parts):
+            partcount += 1
+            orders.append(Part(partcount))
+        
+        print("\n{} parts ordered at {}".format(n_parts, env.now))
+        
+        for part in orders[start_idx:-1]:
+            env.process(process_part(env, part, plant))
+        
         
 if __name__ == '__main__':
-    # order = Order(5)
-    # order.enumerate_order()
-    env = simpy.Environment()
-    # env.process(order_arrival(env))
-    # plant = Plant(env, 2, 2)
-    num_operators = 3
+    pct_complete = []
+    n_sims = 100
+    num_operators = 26
     num_floats = 2
     num_molds = 6
-    env.process(run_plant(env, num_operators, num_floats, num_molds))
-    env.run(until=800)
+    sim_length = 5*480
     
-    # part_count = 0
-    # for order in orders:
-    #     part_count += order.size
+    for i in range(n_sims):
+        orders = []
+        order_completion_times = []
+        env = simpy.Environment()
+        env.process(run_plant(env, num_operators, num_floats, num_molds))
+        env.run(until=sim_length)
+        
+        parts_made = len(order_completion_times)
+        sim_hours, frac_hours = divmod(sim_length, 60)
+        print("\n{}/{} orders completed in {} hours, {} minutes".format(parts_made, orders[-1].order_num, sim_hours, frac_hours))
+        
+        pct_complete.append(100*(parts_made/orders[-1].order_num))
+        
+    mean_pct = np.mean(pct_complete)
+    stdev_pct = np.std(pct_complete)
+    
+    print("\n\n##########################")
+    print("RESULTS OF {} SIMULATIONS".format(n_sims))
+    print("##########################")
+    
+    print("\nMolds:\t{}".format(num_molds))
+    print("Mold Operators:\t{}".format(num_operators))
+    print("Floats:\t{}".format(num_floats))
+    print("\nAverage % Orders Complete:\t{}".format(mean_pct))
+    print("Standard Dev. % Orders Complete:\t{}".format(stdev_pct))
